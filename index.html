@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Tic Tac Toe – Q-Learning AI</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background-color: #f8f9fa;
+      text-align: center;
+      padding: 40px;
+      transition: background-color 0.3s ease, color 0.3s ease;
+    }
+
+    h1 {
+      margin-bottom: 10px;
+    }
+
+    select, button {
+      font-size: 1rem;
+      padding: 8px 16px;
+      margin-top: 10px;
+      border-radius: 8px;
+      border: 1px solid #ccc;
+      transition: background-color 0.3s ease, color 0.3s ease;
+    }
+
+    .board {
+      display: grid;
+      grid-template-columns: repeat(3, 100px);
+      gap: 10px;
+      justify-content: center;
+      margin: 30px auto;
+    }
+
+    .cell {
+      width: 100px;
+      height: 100px;
+      font-size: 2.5em;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background-color: #ffffff;
+      border-radius: 12px;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+      cursor: pointer;
+      transition: background-color 0.2s ease, color 0.2s ease;
+    }
+
+    .cell:hover {
+      background-color: #f1f1f1;
+    }
+
+    .cell.taken {
+      cursor: default;
+      background-color: #d9d9d9;
+    }
+
+    #status {
+      font-size: 1.2rem;
+      margin-top: 20px;
+      font-weight: 500;
+    }
+
+    .controls {
+      margin-top: 10px;
+    }
+
+    /* 🌙 Dark mode styles */
+    body.dark {
+      background-color: #121212;
+      color: #f8f9fa;
+    }
+
+    body.dark .cell {
+      background-color: #1e1e1e;
+      color: #ffffff;
+    }
+
+    body.dark .cell:hover {
+      background-color: #333;
+    }
+
+    body.dark .cell.taken {
+      background-color: #555;
+    }
+
+    body.dark select,
+    body.dark button {
+      background-color: #333;
+      color: #fff;
+      border: 1px solid #555;
+    }
+  </style>
+</head>
+<body>
+  <h1>Tic Tac Toe – Q-Learning AI</h1>
+
+  <div class="controls">
+    <label for="difficulty">Select Difficulty:</label>
+    <select id="difficulty">
+      <option value="easy">Easy</option>
+      <option value="medium">Medium</option>
+      <option value="hard">Hard</option>
+    </select>
+    <button onclick="resetGame()">Reset</button>
+    <button onclick="toggleTheme()">🌓 Toggle Theme</button>
+  </div>
+
+  <div class="board" id="board"></div>
+  <p id="status"></p>
+
+  <script>
+    const EMPTY = " ";
+    const PLAYER = "X";
+    const AI = "O";
+    let board = Array(9).fill(EMPTY);
+    let gameOver = false;
+    let qTable = {};
+
+    fetch("q_table.json")
+      .then(res => res.json())
+      .then(data => { qTable = data; initBoard(); });
+
+    function initBoard() {
+      const boardDiv = document.getElementById("board");
+      boardDiv.innerHTML = "";
+      board.forEach((cell, idx) => {
+        const cellDiv = document.createElement("div");
+        cellDiv.className = "cell";
+        cellDiv.textContent = cell;
+        cellDiv.addEventListener("click", () => playerMove(idx));
+        boardDiv.appendChild(cellDiv);
+      });
+    }
+
+    function playerMove(idx) {
+      if (board[idx] !== EMPTY || gameOver) return;
+      board[idx] = PLAYER;
+      updateBoard();
+      if (checkWinner(PLAYER)) return endGame("You win!");
+      if (isDraw()) return endGame("It's a draw.");
+      setTimeout(aiMove, 200);
+    }
+
+    function aiMove() {
+      const state = board.join("");
+      const available = board.map((v, i) => v === EMPTY ? i : null).filter(v => v !== null);
+      let move;
+      const difficulty = document.getElementById("difficulty").value;
+
+      if (difficulty === "easy") {
+        move = available[Math.floor(Math.random() * available.length)];
+      } else if (difficulty === "medium") {
+        move = chooseMediumMove(state, available, qTable);
+      } else {
+        move = chooseHardMove(state, available, qTable);
+      }
+
+      board[move] = AI;
+      updateBoard();
+      if (checkWinner(AI)) return endGame("AI wins! 🤖");
+      if (isDraw()) return endGame("It's a draw.");
+    }
+
+    function chooseMediumMove(state, available, qTable) {
+      if (Math.random() < 0.3 || !qTable[state]) {
+        return available[Math.floor(Math.random() * available.length)];
+      }
+      let best = available[0], maxQ = -Infinity;
+      for (let move of available) {
+        const q = qTable[state][move] ?? 0;
+        if (q > maxQ) {
+          maxQ = q;
+          best = move;
+        }
+      }
+      return best;
+    }
+
+    function chooseHardMove(state, available, qTable) {
+      if (!qTable[state]) {
+        return available[Math.floor(Math.random() * available.length)];
+      }
+      let best = available[0], maxQ = -Infinity;
+      for (let move of available) {
+        const q = qTable[state][move] ?? 0;
+        if (q > maxQ) {
+          maxQ = q;
+          best = move;
+        }
+      }
+      return best;
+    }
+
+    function updateBoard() {
+      const cells = document.querySelectorAll(".cell");
+      board.forEach((cell, i) => {
+        cells[i].textContent = cell;
+        cells[i].classList.toggle("taken", cell !== EMPTY);
+      });
+    }
+
+    function checkWinner(player) {
+      const win = [
+        [0,1,2],[3,4,5],[6,7,8],
+        [0,3,6],[1,4,7],[2,5,8],
+        [0,4,8],[2,4,6]
+      ];
+      return win.some(combo => combo.every(i => board[i] === player));
+    }
+
+    function isDraw() {
+      return board.every(cell => cell !== EMPTY);
+    }
+
+    function endGame(msg) {
+      document.getElementById("status").textContent = msg;
+      gameOver = true;
+    }
+
+    function resetGame() {
+      board = Array(9).fill(EMPTY);
+      gameOver = false;
+      document.getElementById("status").textContent = "";
+      initBoard();
+    }
+
+    function toggleTheme() {
+      document.body.classList.toggle("dark");
+    }
+  </script>
+</body>
+</html>
